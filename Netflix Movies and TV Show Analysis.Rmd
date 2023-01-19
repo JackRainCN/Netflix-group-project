@@ -1,0 +1,397 @@
+---
+title: "Netflix Movies and TV Show Analysis"
+author: "Yao MENG, Hanming ZHANG, Li GUO, Xuqing CHEN"
+date: "2023-01-18"
+output: 
+  html_document: 
+    toc: yes
+    toc_float: yes
+    code_folding: show
+    
+---
+![](https://www.forbes.fr/wp-content/uploads/2022/12/gettyimages-1245717238.jpg)
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Introduction about dataset
+
+**About this Dataset:**
+
+Netflix is one of the most popular media and video streaming platforms. They have over 8000 movies or tv shows available on their platform, as of mid-2021, they have over 200M Subscribers globally. This tabular dataset consists of listings of all the movies and tv shows available on Netflix, along with details such as - cast, directors, ratings, release year, duration, etc.
+
+**Data Explanation for Each Column:**
+
+The dataset has 8807 observations and describes the data from the following 12 variables:
+
+-   **show_id** : Unique ID for Movie / TV Show
+
+-   **type** : Identifier the tpye of screen shows, classified as either a movie or a TV show
+
+-   **title** : Title of the Movie / TV Show
+
+-   **director** : Director of the Movie
+
+-   **cast** : Actors involved in the Movie / TV Show
+
+-   **country** : Country where the Movie / TV Show was produced
+
+-   **date_added** : Date the Movie / TV Show was added on Netflix
+
+-   **release_year** : The year the Movie/TV Show was released
+
+-   **rating** : Ratings for Movies/TV shows (according to the US television content rating system),Movie/TV Shows will fall into one of six classes (TV-Y, TV-Y7, TV-G, TV-PG, TV-14 or TV-MA)
+
+-   **duration** : Total duration of the Movie/TV Show, in minutes or number of seasons 
+
+-   **listed_in** : Genre or category the show belongs to
+
+-   **description** : Brief introduction about the show
+
+# Presentation and description of the problem
+As part of this project, we conducted the following analysis of the Netflix movie and TV show dataset: 
+
+Q1 Which countries have been most active in releasing screen shows? How many Movies and TV Shows have been released in each of these countries?
+
+Q2 In recent years, has Netflix focused more on distributing TV Shows or Movies? What is the trend?
+
+Q3 Establish a Youth protection search engine 
+
+(1) By entering the name of the film/TVshow, we can look up basic information about the film. Parents may be concerned about the suitability of the film for their child, so we have included a note at the end. 
+
+(2) Make recommendations for films by rating, giving recommendations for films for different age groups, eg: what is the best film for a 12/15 year old to watch
+
+Q4 The most prolific directors, and actors who are associated with most movies
+
+# Data Preparation
+
+```{r}
+# loading packages
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+# read and check the data frame
+netflix <- read_csv("netflix_titles.csv")
+str(netflix)
+colSums(is.na(netflix))
+
+```
+
+# EDA & Visualization of the data
+
+## Q1 Which countries have been most active in releasing screen shows? How many Movies and TV Shows have been released in each of these countries?
+
+```{r}
+Top_releae_country = netflix %>% 
+  select(type, country) %>% 
+  separate_rows(country, sep = ", ") %>% 
+  rename(Country = country) %>% 
+  mutate(Country = fct_infreq(Country)) %>% 
+  group_by(type, Country) %>% 
+  summarise(Count = n())
+
+#There are many countries, we only look at the top 10 countries with show releases
+ggplot(data = Top_releae_country %>% slice(1:10), 
+       aes(x = Country, y = Count,
+           fill = type)) +
+  geom_col(position = "dodge2", idth = 0.9) + 
+  geom_text(aes(label=Count), 
+            position = position_dodge2(width = 0.8, preserve = 'single'), 
+            vjust = -0.2, hjust = 0.5)+
+  theme(axis.text.x = element_text(angle = 75, hjust = 0.5, vjust = 0.5)) +
+  labs(title = "Count by Country by Show Type",
+       x = "Country",
+       y = "Count")
+```
+
+The bar chart clearly shows that the countries with the most releases are the USA (2751 Movies, 938 TV Shows), India (962 Movies, 84 TV Shows) and the UK (532 Movies, 272 TV Shows).
+
+## Q2 In recent years, has Netflix focused more on distributing TV Shows or Movies? What is the trend?
+
+```{r}
+library(reshape2)
+
+head(netflix$date_added[1])
+# It shows"September 25, 2021"
+# Therefore, the data of 2021 would be incomplete. 
+# So if we would like to analyse the past 10 years' data, I suggest we analyse from 2010 till now.
+# Set MT_Sum as the summary for the total numbers of movie and TV shows from 2010 to 2021(the data of 2021 is incomplete).
+# Define MT_Sum as the summarize of movies and TV shows in each year.
+netflix <- separate(netflix, date_added, c('month','day','year'), sep=' ')
+MT_Sum<-netflix %>%  
+  group_by(Year=year) %>%  
+  summarise(Movie = sum(type=="Movie"), TV_Show=sum(type=="TV Show"))%>%  
+  arrange(desc(Year))%>%  
+  head(11)
+
+# reshape the data
+MT_Sum_Re <- melt(MT_Sum,id="Year")
+colnames(MT_Sum_Re) <- c("Year", "Type", "Number")
+
+# plots
+MT_Sum_Plot <-ggplot(MT_Sum_Re) + 
+  aes(x = Year, y = Number, colour = Type, group = Type) +  
+  geom_line(size = 1) +  
+  scale_color_hue(direction = 1) +  
+  theme_minimal()
+MT_Sum_Plot
+```
+
+It can be seen that the number of TV series added to Netflix has been increasing year on year over the last 10 years, with a clear trend of growth from 2015 to 2017.
+
+The number of movies added is on an upward trend until 2019 and rose significantly between 2015 and 2019, but the number of new movies added has decreased since 2020. Due to the specificity of recent years, we believe that the outbreak of covid-19 has had a huge impact on film production, particularly as the global embargo in 2020 has prevented Netflix from adding more new films.
+
+Overall, we infer that Netflix is more focused on adding movies based on trends before covid-19 starts to impact in 2020.
+
+## Q3 Youth protection search engine
+
+**(1) By entering the name of the film/TVshow, we can look up basic information about the film. Parents may be concerned about the suitability of the film for their child, so we have included a note at the end.**
+
+**(2) Make recommendations for films by rating, giving recommendations for films for different age groups, eg: what is the best film for a 12/15 year old to watch**
+
+```{r}
+#enquiry different ratings level in dataframe
+unique(netflix$rating)
+
+#set a function which could print the basic information by searching the titile of film
+Rearch_Title<-function(x){
+  result<-
+    netflix %>% 
+    dplyr::filter(title==x) %>% 
+    select(Title=title,
+           Type=type,
+           Director=director,
+           Release_Year=release_year,
+           Duration=duration,
+           Rating=rating,
+           Category=listed_in,
+           Description=description)
+  result[is.na(result)] <- 'UNKNOW'
+  
+  print(result)
+  
+  #set if loop to print different warning message according to the rating
+  if(result$Rating=='G'){
+    print('This movie is for General Audiences,All Ages Admitted')
+  }else if(result$Rating=='PG'){
+    print('This movie is Parental Guidance Suggested,Some Material May Not Be Suitable for Children.')
+  }else if(result$Rating=='PG-13'){
+    print('This movie is Parents Strongly Cautioned, Some Material May Be Inappropriate for Children Under 13')
+  }else if(result$Rating=='NC-17'){
+    print('This movie is only for Adults over 17')
+  }else if(result$Rating=='R'){
+    print('This movie is Restricted, Children Under 17 Require Accompanying Parent or Adult Guardian.')
+  }else if(result$Rating=='TV-Y'){
+    print('This TV Show is for all children')
+  }else if(result$Rating=='TV-Y7'){
+    print('This TV Show is designed for children age 7 and aboven')
+  }else if(result$Rating=='TV-G'){
+    print('This TV Show is General Audience')
+  }else if(result$Rating=='TV-Y7-FV'){
+    print('This TV Show is Directed to Older Children - Fantasy Violence ')
+  }else if(result$Rating=='TV-PG'){
+    print('This TV Show is  Parental Guidance Suggested ')
+  }else if(result$Rating=='TV-14'){
+    print('This TV Show ontains some material that unsuitable for children under 14 years of age.  ')
+  }else if(result$Rating=='TV-MA'){
+    print('This TV Show is specifically designed to be viewed by adults')
+  }else
+    print('There is no age limit for this movie/TV show')
+}
+
+
+Rearch_Title('Love on the Spectrum')
+
+#create a simple df
+agerecom<-
+  netflix %>% 
+  select(Title=title,
+         Rating=rating)  
+head(agerecom)
+
+#set a function which will reduce the first 2 column of dataframe
+reducecolumn<-function(a){
+  a<-a[,-c(1:2)]
+  return(a)
+}
+
+#create 5 separate df according to age
+result1<-
+  agerecom %>% 
+  dplyr::filter(Rating %in% c('TV-Y','TV-G','TV-PG','G','PG')) %>% 
+  mutate(id=row_number(),
+         'under7'=Title)
+result2<-
+  agerecom %>% 
+  dplyr::filter(Rating %in% c('TV-Y','TV-G','TV-PG','G','PG','TV-Y7','TV-Y7-FV')) %>% 
+  mutate(id=row_number(),
+         'under13'=Title)
+result3<-
+  agerecom %>% 
+  dplyr::filter(Rating %in% c('TV-Y','TV-G','TV-PG','G','PG','TV-Y7','TV-Y7-FV','TV-14',
+                              'PG-13','R')) %>% 
+  mutate(id=row_number(),
+         'under14'=Title)
+result4<-
+  agerecom %>% 
+  dplyr::filter(Rating %in% c('TV-Y','TV-G','TV-PG','G','PG','TV-Y7','TV-Y7-FV','TV-14',
+                              'PG-13','R','TV-MA','NC-17')) %>% 
+  mutate(id=row_number(),
+         'under17'=Title)
+result5<-
+  agerecom %>% 
+  mutate(id=row_number(),
+         'All age'=Title)
+
+#Construct a list containing five data boxes and combine them into one table.
+l=list(result1,result2,result3,result4,result5)
+l1<-lapply(l, reducecolumn)
+df1<-l1%>% reduce(full_join, by = "id")
+#the new df only contain 5 column'id','under7','under13','under14','under17','all age'
+
+#Check that the vacant value is correctly filled with NA
+colSums(is.na(df1))
+
+#Generate a pie chart by age group
+df1
+df2<-data_frame(Agegroup = c('under07','under13','under14','under17','all age'),
+               Number=c(1718,2058,5507,8717,8807))
+
+df2 = df2[order(df2$Number, decreasing = TRUE),]   # Use order() to sort the data of the data frame from largest to smallest according to the required columns
+myLabel = as.vector(df2$Agegroup)   
+myLabel = paste(myLabel, "(", round(df2$Number / sum(df2$Number) * 100, 2), "%)        ", sep = "") 
+
+ggplot(df2, aes(x = "", y = Number, fill = Agegroup)) + 
+  geom_bar(stat = "identity", width = 1) +    
+  coord_polar(theta = "y") + 
+  labs(x = "", y = "", title = "") + 
+  theme(axis.ticks = element_blank()) + 
+  theme(legend.title = element_blank(), legend.position = "top") + 
+  scale_fill_discrete(breaks = df2$Agegroup, labels = myLabel)+
+  theme(axis.text.x = element_blank())
+
+
+#Set the function to display different columns according to age
+agecheck<-function(a){
+  if(a<7){
+    df1 %>% 
+      select('under7')
+  }else if(7<a & a<=13){
+    df1 %>% 
+      select('under13')
+  }else if(13<a & a<=14){
+    df1 %>% 
+      select('under14')
+  }else if(14<a & a<=17){
+    df1 %>% 
+      select('under17')
+  }else 
+    df1 %>% 
+    select('All age')
+}
+
+#test the function
+agecheck(12)
+agecheck(15)
+```
+
+## Q4 The most prolific directors, and actors who are associated with most movies
+
+```{r}
+#Number of productions produced by each director
+Top_dirdecor<-netflix %>% 
+  group_by(director) %>% 
+  filter(director !="") %>%
+  summarize(Total=n())%>%
+  arrange(desc(Total))%>%
+  slice(1:10)
+Top_dirdecor
+
+#Visualize data results
+ggplot(data=Top_dirdecor %>% 
+         slice(1:10),mapping =aes(x=reorder(director, - Total), 
+                                  y=Total)) +
+        geom_bar(stat = "identity",width = 0.8,
+                 position = position_dodge(width = 0.8)) +
+  geom_text(aes(label=Total),
+            position = position_dodge(width = 0.9),size=3,vjust=-0.25)+
+          geom_col(fill="light green")+ 
+          labs("Top Directors") +
+          xlab("Directors")+
+          ylab("Number of movies")+
+theme(panel.background= element_blank()
+      ,plot.title=element_text(30)
+      ,axis.title.x=element_text(30)
+      ,axis.title.y=element_text(30)
+      ,axis.text.x=element_text(20, angle = 45,vjust = 1, hjust = 1)
+      ,axis.text.y=element_text(20)
+      )
+
+#List the actors involved in each film
+
+List_Actors<-netflix %>% 
+  select(c("show_id","cast","director")) %>% 
+  gather(key = "role", value = "actor", cast, director) %>% 
+  filter(actor != "") %>%
+  separate_rows(actor, sep = ",")->actorlist
+actorlist
+
+#The number of productions each actor participated in
+Count_Actor<- actorlist %>% 
+  group_by(actor,role) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+Count_Actor
+
+#Visualize data results
+Count_Actor %>% 
+  group_by(role="cast") %>% 
+  top_n(10,count) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = fct_reorder(actor,count,.desc = TRUE), y = count, fill = role)) + 
+            geom_bar(stat = "identity") + 
+  geom_text(aes(label=count),
+            position = position_dodge(width = 0.9),size=3,vjust=-0.25)+
+            theme(legend.position = "none") + 
+            labs(x = "actor") +
+       theme(panel.background= element_blank()
+      ,plot.title=element_text(30)
+      ,axis.title.x=element_text(30)
+      ,axis.title.y=element_text(30)
+      ,axis.text.x=element_text(20, angle = 45,vjust = 1, hjust = 1)
+      ,axis.text.y=element_text(20)
+      )
+```
+
+The director with the most Movies and TV Show works is director Rajiv Chilaka, he has produced a total of 19 works. We also list the top ten participating actors who participate the largest number of works. It can be seen that the actor with the largest number of works is Anupam Kher who has participated in 39 Movies and TV Shows works.
+
+# Interpretation / Conclusion
+
+The results of the exploratory data analysis show that, since records began, most of the content on Netflix has come from the United States, India, and the United Kingdom, with the United States contributing significantly to content distribution. For the top 10 countries, the majority of countries released more movies than TV shows.
+
+There was an upward trend in new movies and TV shows added before 2019, but the trend has declined since then. Most likely due to the impact of Covid-19. And compared to TV shows, movies are affected more significantly (the decline in growth is more obvious).
+
+Considering the protection of young people, we set up two search functions. The first one allows users to enter the name of a specific movie, query its basic information and get the viewing age prompt; the second one can recommend movies and TV programs suitable for young people's age through age confirmation.
+
+By grading the shows by age group, we get a table with six columns: 'id','under7','under13','under14','under17','all age'. Each column lists the titles of movies available for that age group. A pie chart is obtained according to the data in this table.
+
+According to the chart, the director with the most Movies and TC Show works is director Rajiv Chilaka, who has produced a total of 19 works, and It can be seen that the actor with the largest number of works is Anupam Kher who has participated in 39 Movies and TC Shows works. It can be concluded that the most professional and popular actor is Anupam Kher , and there are many actors with the least participation in Movies and TV Shows works, such as Najite Dede and A. Murat Özgen and other actors. Therefore, we suggest that the directors can also cooperate with actors who have participated in a large number of works to increase ratings and at the same time, offer more opportunities for actors who have less Movies and TV Shows works. Actors can also pay more attention to directors who have famous Movies and TV Shows works, learn from them, and strive for more opportunities for to participate in these works.
+
+# Who did what
+
+The dataset was selected by the entire group. After taking an initial look at the dataset, we discussed the problem setting and solution together.
+
+In order to save time and be more efficient, we assign 4 questions to 4 team members when writing code:
+
+Q1 - Yao MENG,  Q2 - Li GUO, Q3 - Xuqing CHEN, Q4 - Hanming ZHANG. 
+
+And discuss improvement plans together after the code is initially completed.
+
+The conclusions were jointly written by all team members, and finally all content was integrated by Yao.
+
+# References
+
+[Netflix Movies and TV Shows - SHIVAM BANSAL](https://www.kaggle.com/datasets/shivamb/netflix-shows?datasetId=434238&sortBy=voteCount&language=R&tagIds=13202)
